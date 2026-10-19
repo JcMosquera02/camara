@@ -13,13 +13,16 @@
     <header>
       <p class="eyebrow">DETECCIÓN EN EL NAVEGADOR</p>
       <h1>Cámara y seguimiento facial</h1>
-      <p class="intro">Enciende la cámara cuando estés listo. El recuadro seguirá los rostros que detecte.</p>
+      <p class="intro">Enciende la cámara y coloca el rostro dentro del contorno para iniciar el análisis.</p>
     </header>
 
     <section class="camera-section" aria-label="Vista de la cámara">
       <div id="camera-stage" class="camera-stage">
         <video id="video" autoplay playsinline muted hidden></video>
         <canvas id="overlay" aria-hidden="true" hidden></canvas>
+        <svg id="head-guide" class="head-guide" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" hidden>
+          <path d="M50 5 C31 5 23 17 23 35 C23 48 27 60 34 68 C37 72 39 75 39 79 C29 82 22 86 17 92 M17 92 C28 96 38 98 50 98 C62 98 72 96 83 92 M83 92 C78 86 71 82 61 79 C61 75 63 72 66 68 C73 60 77 48 77 35 C77 17 69 5 50 5 Z" />
+        </svg>
         <p id="camera-placeholder" class="camera-placeholder">La cámara está apagada</p>
       </div>
       <p id="status" class="status" role="status" aria-live="polite">Pulsa “Encender cámara” para comenzar.</p>
@@ -31,7 +34,7 @@
       <button id="capture-photo" class="button button-secondary" type="button" disabled>Capturar foto</button>
     </div>
 
-    <p class="notice">La edad y la etiqueta (hombre/mujer) son estimaciones visuales orientativas: pueden equivocarse y no determinan la identidad de género. Se estabilizan con ocho detecciones seguidas. El video se procesa localmente y no se envía a un servidor.</p>
+    <p class="notice">El análisis empieza solo cuando el rostro cabe dentro del contorno. Edad y etiqueta hombre/mujer son estimaciones visuales orientativas: pueden equivocarse y no determinan la identidad de género. No se puede garantizar un margen de error fijo ni deducir la nacionalidad por el rostro. El video se procesa localmente y no se envía a un servidor.</p>
     <canvas id="capture-canvas" hidden></canvas>
   </main>
 </body>
