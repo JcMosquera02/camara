@@ -130,7 +130,7 @@ function trackDetections(detections) {
   return trackedDetections;
 }
 
-function drawDetections(detections) {
+function drawDetections(detections, hasDetectedFace = detections.length > 0) {
   const context = overlay.getContext("2d");
   if (!context) {
     throw new Error("El navegador no pudo crear el lienzo para dibujar los rostros.");
@@ -183,7 +183,7 @@ function drawDetections(detections) {
       ? `Estabilizando edad y etiqueta con hasta ${STABILIZATION_SAMPLES} detecciones.`
       : `${detections.length} rostro${detections.length === 1 ? "" : "s"} con estimaciones estabilizadas.`;
   } else {
-    status.textContent = detections.length
+    status.textContent = hasDetectedFace
       ? "Rostro detectado. Centra la cara y ajusta la distancia dentro del contorno."
       : "Coloca el rostro dentro del contorno para iniciar el escaneo.";
   }
@@ -212,9 +212,9 @@ async function detectFaces() {
       drawDetections(alignedFaces.map((face, index) => ({
         ...face,
         ...estimates[index],
-      })));
+      })), true);
     } else {
-      drawDetections([]);
+      drawDetections([], detections.length > 0);
     }
 
     detectionFrameId = window.requestAnimationFrame(detectFaces);
