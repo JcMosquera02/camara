@@ -20,7 +20,7 @@ const HEAD_SILHOUETTE = [
   [25, 61], [27, 68], [31, 74], [38, 80], [38, 98], [62, 98], [62, 80], [69, 74],
   [73, 68], [75, 61], [79, 60], [80, 58], [82, 51], [82, 45], [81, 43], [79, 43],
   [77, 44], [78, 41], [79, 36], [78, 29], [76, 22], [73, 15], [69, 10], [63, 6], [56, 5],
-];
+].map(([x, y]) => [x * 0.78 + 11, y]);
 let modelsPromise;
 let startRequestId = 0;
 let detectionFrameId;
@@ -81,15 +81,16 @@ function isPointInsideHead([x, y]) {
 function traceHeadShape(context, width, height, closeAtNeck = false) {
   const scaleX = width / 100;
   const scaleY = height / 100;
-  const moveTo = (x, y) => context.moveTo(x * scaleX, y * scaleY);
-  const lineTo = (x, y) => context.lineTo(x * scaleX, y * scaleY);
+  const guideX = (x) => (x * 0.78 + 11) * scaleX;
+  const moveTo = (x, y) => context.moveTo(guideX(x), y * scaleY);
+  const lineTo = (x, y) => context.lineTo(guideX(x), y * scaleY);
   const bezierCurveTo = (x1, y1, x2, y2, x3, y3) => {
     context.bezierCurveTo(
-      x1 * scaleX,
+      guideX(x1),
       y1 * scaleY,
-      x2 * scaleX,
+      guideX(x2),
       y2 * scaleY,
-      x3 * scaleX,
+      guideX(x3),
       y3 * scaleY,
     );
   };
