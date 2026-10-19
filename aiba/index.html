@@ -1,30 +1,38 @@
-<!DOCTYPE html>
-<html lang='en'>
+<!doctype html>
+<html lang="es">
 <head>
-    <meta charset='utf-8'>
-    <meta name='viewport' content='width=device-width, initial-scale=1'>
-    <title>Page Title</title>
-    <link rel='stylesheet' href='main.css'>
-    <script src='main.js'></script>
-    <script src="https://opencv.org" type="text/javascript"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101827">
+  <title>Cámara y detección facial</title>
+  <link rel="stylesheet" href="main.css">
+  <script type="module" src="main.js"></script>
 </head>
 <body>
-    <video id="video" autoplay playsinline width="640" height="480"></video>
-<button id="capturar">Capturar Foto</button>
-<canvas id="canvas" style="display:none;"></canvas>
+  <main class="camera-card">
+    <header>
+      <p class="eyebrow">DETECCIÓN EN EL NAVEGADOR</p>
+      <h1>Cámara y seguimiento facial</h1>
+      <p class="intro">Enciende la cámara cuando estés listo. El recuadro seguirá los rostros que detecte.</p>
+    </header>
 
-<script>
-  const video = document.getElementById('video');
+    <section class="camera-section" aria-label="Vista de la cámara">
+      <div id="camera-stage" class="camera-stage">
+        <video id="video" autoplay playsinline muted hidden></video>
+        <canvas id="overlay" aria-hidden="true" hidden></canvas>
+        <p id="camera-placeholder" class="camera-placeholder">La cámara está apagada</p>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite">Pulsa “Encender cámara” para comenzar.</p>
+    </section>
 
-  // Solicitar permiso y encender la cámara
-  navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-    .then((stream) => {
-      video.srcObject = stream;
-    })
-    .catch((err) => {
-      console.error("Error al acceder a la cámara: ", err);
-    });
-  
-</script>
+    <div class="controls">
+      <button id="start-camera" class="button button-primary" type="button">Encender cámara</button>
+      <button id="stop-camera" class="button button-secondary" type="button" hidden>Apagar cámara</button>
+      <button id="capture-photo" class="button button-secondary" type="button" disabled>Capturar foto</button>
+    </div>
+
+    <p class="notice">La etiqueta es una estimación visual orientativa (hombre/mujer); puede equivocarse y no determina la identidad de género. El video se procesa localmente y no se envía a un servidor.</p>
+    <canvas id="capture-canvas" hidden></canvas>
+  </main>
 </body>
 </html>
