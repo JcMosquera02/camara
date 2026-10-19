@@ -3,6 +3,7 @@ import * as faceapi from "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.
 const MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model";
 const video = document.querySelector("#video");
 const overlay = document.querySelector("#overlay");
+const headGuide = document.querySelector("#head-guide");
 const stage = document.querySelector("#camera-stage");
 const placeholder = document.querySelector("#camera-placeholder");
 const status = document.querySelector("#status");
@@ -32,6 +33,37 @@ function loadModels() {
   return modelsPromise;
 }
 
+function isFaceAligned(box) {
+  const centerX = (box.x + box.width / 2) / video.videoWidth;
+  const centerY = (box.y + box.height / 2) / video.videoHeight;
+  const width = box.width / video.videoWidth;
+  const height = box.height / video.videoHeight;
+  const guideCenterX = 0.5;
+  const guideCenterY = 0.5;
+  const guideRadiusX = 0.3;
+  const guideRadiusY = 0.4;
+  const corners = [
+    [box.x / video.videoWidth, box.y / video.videoHeight],
+    [(box.x + box.width) / video.videoWidth, box.y / video.videoHeight],
+    [box.x / video.videoWidth, (box.y + box.height) / video.videoHeight],
+    [(box.x + box.width) / video.videoWidth, (box.y + box.height) / video.videoHeight],
+  ];
+
+  return width >= 0.18
+    && width <= 0.5
+    && height >= 0.25
+    && height <= 0.65
+    && centerX >= 0.34
+    && centerX <= 0.66
+    && centerY >= 0.25
+    && centerY <= 0.72
+    && corners.every(([x, y]) => (
+      ((x - guideCenterX) / guideRadiusX) ** 2
+      + ((y - guideCenterY) / guideRadiusY) ** 2
+      <= 1
+    ));
+}
+
 function trackDetections(detections) {
   const unmatchedTracks = new Set(faceTracks);
   const trackedDetections = detections.map((result) => {
@@ -59,7 +91,7 @@ function trackDetections(detections) {
     if (track) {
       unmatchedTracks.delete(track);
     } else {
-      track = { box, samples: 0, maleProbability: 0, age: 0, missedFrames: 0 };
+      track = { box, samples: 0, maleProbability: 0, age: 0, gender: null, missedFrames: 0 };
       faceTracks.push(track);
     }
 
@@ -71,21 +103,20 @@ function trackDetections(detections) {
       track.maleProbability += (maleProbability - track.maleProbability) / sampleCount;
       track.age += (result.age - track.age) / sampleCount;
       track.samples = sampleCount;
+      if (track.samples === STABILIZATION_SAMPLES) {
+        track.gender = track.maleProbability >= 0.5 ? "Hombre" : "Mujer";
+      }
     } else {
       const smoothing = 0.2;
-      track.maleProbability += (maleProbability - track.maleProbability) * smoothing;
       track.age += (result.age - track.age) * smoothing;
     }
 
     track.box = box;
     track.missedFrames = 0;
-    const gender = track.maleProbability >= 0.5 ? "Hombre" : "Mujer";
-    const confidence = Math.round(Math.max(track.maleProbability, 1 - track.maleProbability) * 100);
 
     return {
       box,
-      gender,
-      confidence,
+      gender: track.gender,
       age: Math.round(track.age),
       sampleCount: track.samples,
     };
@@ -108,11 +139,14 @@ function drawDetections(detections) {
   context.clearRect(0, 0, overlay.width, overlay.height);
 
   const trackedDetections = trackDetections(detections);
+  stage.classList.toggle("is-aligned", trackedDetections.length > 0);
   for (const face of trackedDetections) {
     const { x, y, width, height } = face.box;
     const fontSize = Math.max(14, Math.round(overlay.width / 50));
     const padding = 7;
-    const label = `${face.gender} ${face.confidence}% · ~${face.age} años`;
+    const label = face.gender
+      ? `${face.gender} · edad ~${face.age} años`
+      : "Ajustando rostro";
     const progress = face.sampleCount < STABILIZATION_SAMPLES
       ? `Ajustando estimación ${face.sampleCount}/${STABILIZATION_SAMPLES}`
       : "Estimación estabilizada";
@@ -121,7 +155,13 @@ function drawDetections(detections) {
 
     context.lineWidth = Math.max(2, Math.round(overlay.width / 320));
     context.strokeStyle = "#31e6b0";
-    context.strokeRect(x, y, width, height);
+    context.beginPath();
+    context.moveTo(x + width * 0.5, y);
+    context.bezierCurveTo(x + width * 0.82, y, x + width, y + height * 0.22, x + width * 0.91, y + height * 0.56);
+    context.bezierCurveTo(x + width * 0.85, y + height * 0.82, x + width * 0.66, y + height, x + width * 0.5, y + height);
+    context.bezierCurveTo(x + width * 0.34, y + height, x + width * 0.15, y + height * 0.82, x + width * 0.09, y + height * 0.56);
+    context.bezierCurveTo(x, y + height * 0.22, x + width * 0.18, y, x + width * 0.5, y);
+    context.stroke();
     context.font = `600 ${fontSize}px system-ui, sans-serif`;
     const labelWidth = Math.max(
       context.measureText(label).width,
@@ -143,7 +183,9 @@ function drawDetections(detections) {
       ? `Estabilizando edad y etiqueta con hasta ${STABILIZATION_SAMPLES} detecciones.`
       : `${detections.length} rostro${detections.length === 1 ? "" : "s"} con estimaciones estabilizadas.`;
   } else {
-    status.textContent = "Buscando rostros…";
+    status.textContent = detections.length
+      ? "Rostro detectado. Centra la cara y ajusta la distancia dentro del contorno."
+      : "Coloca el rostro dentro del contorno para iniciar el escaneo.";
   }
 }
 
@@ -153,14 +195,28 @@ async function detectFaces() {
   }
 
   try {
-    const detections = await faceapi
-      .detectAllFaces(
-        video,
-        new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.45 }),
-      )
-      .withAgeAndGender();
+    const detections = await faceapi.detectAllFaces(
+      video,
+      new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.45 }),
+    );
+    const alignedFaces = detections.filter(({ detection }) => isFaceAligned(detection.box));
 
-    drawDetections(detections);
+    if (alignedFaces.length) {
+      const faceCrops = await faceapi.extractFaces(
+        video,
+        alignedFaces.map(({ detection }) => detection),
+      );
+      const estimates = await Promise.all(
+        faceCrops.map((faceCrop) => faceapi.predictAgeAndGender(faceCrop)),
+      );
+      drawDetections(alignedFaces.map((face, index) => ({
+        ...face,
+        ...estimates[index],
+      })));
+    } else {
+      drawDetections([]);
+    }
+
     detectionFrameId = window.requestAnimationFrame(detectFaces);
   } catch (error) {
     console.error("Error al analizar los rostros:", error);
@@ -185,7 +241,9 @@ function stopCamera() {
   faceTracks = [];
   video.hidden = true;
   overlay.hidden = true;
+  headGuide.hidden = true;
   placeholder.hidden = false;
+  stage.classList.remove("is-aligned");
   overlay.getContext("2d")?.clearRect(0, 0, overlay.width, overlay.height);
   startButton.hidden = false;
   startButton.disabled = false;
@@ -234,6 +292,7 @@ async function startCamera() {
     overlay.height = video.videoHeight;
     stage.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
     overlay.hidden = false;
+    headGuide.hidden = false;
     status.textContent = "Buscando rostros…";
     detectFaces();
   } catch (error) {
