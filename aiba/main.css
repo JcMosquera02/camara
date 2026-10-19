@@ -80,6 +80,7 @@ h1 {
 
 #overlay {
   pointer-events: none;
+  z-index: 2;
 }
 
 .head-guide {
@@ -89,22 +90,20 @@ h1 {
   height: 100%;
   overflow: visible;
   pointer-events: none;
+  z-index: 3;
 }
 
-.head-guide path {
+.head-guide .head-outline {
   fill: none;
-  stroke: #f4c95d;
-  stroke-dasharray: 2 1.5;
+  stroke: #fff;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 0.7;
+  stroke-width: 1;
   vector-effect: non-scaling-stroke;
-  transition: stroke 150ms ease, stroke-dasharray 150ms ease;
 }
 
-.camera-stage.is-aligned .head-guide path {
-  stroke: #31e6b0;
-  stroke-dasharray: none;
+.camera-stage.is-aligned .head-outline {
+  filter: drop-shadow(0 0 3px rgb(49 230 176 / 75%));
 }
 
 .camera-placeholder {

@@ -13,7 +13,7 @@
     <header>
       <p class="eyebrow">DETECCIÓN EN EL NAVEGADOR</p>
       <h1>Cámara y seguimiento facial</h1>
-      <p class="intro">Enciende la cámara y coloca el rostro dentro del contorno para iniciar el análisis.</p>
+      <p class="intro">Enciende la cámara y centra a una sola persona dentro del contorno. El exterior se oscurece para guiar el encuadre.</p>
     </header>
 
     <section class="camera-section" aria-label="Vista de la cámara">
@@ -21,7 +21,8 @@
         <video id="video" autoplay playsinline muted hidden></video>
         <canvas id="overlay" aria-hidden="true" hidden></canvas>
         <svg id="head-guide" class="head-guide" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" hidden>
-          <path d="M50 5 C31 5 23 17 23 35 C23 48 27 60 34 68 C37 72 39 75 39 79 C29 82 22 86 17 92 M17 92 C28 96 38 98 50 98 C62 98 72 96 83 92 M83 92 C78 86 71 82 61 79 C61 75 63 72 66 68 C73 60 77 48 77 35 C77 17 69 5 50 5 Z" />
+          <path class="head-guide-backdrop" fill="#000" fill-rule="evenodd" d="M0 0 H100 V100 H0 Z M50 5 C34 5 25 15 23 29 C21 36 22 41 23 44 C19 42 17 45 18 51 L20 58 Q21 61 25 61 C27 69 31 75 38 80 L38 98 L62 98 L62 80 C69 75 73 69 75 61 Q79 61 80 58 L82 51 C83 45 81 42 77 44 C78 41 79 36 77 29 C75 15 66 5 50 5 Z" />
+          <path class="head-outline" d="M50 5 C34 5 25 15 23 29 C21 36 22 41 23 44 C19 42 17 45 18 51 L20 58 Q21 61 25 61 C27 69 31 75 38 80 L38 98 M62 98 L62 80 C69 75 73 69 75 61 Q79 61 80 58 L82 51 C83 45 81 42 77 44 C78 41 79 36 77 29 C75 15 66 5 50 5 Z" />
         </svg>
         <p id="camera-placeholder" class="camera-placeholder">La cámara está apagada</p>
       </div>
@@ -34,7 +35,7 @@
       <button id="capture-photo" class="button button-secondary" type="button" disabled>Capturar foto</button>
     </div>
 
-    <p class="notice">El análisis empieza solo cuando el rostro cabe dentro del contorno. Edad y etiqueta hombre/mujer son estimaciones visuales orientativas: pueden equivocarse y no determinan la identidad de género. No se puede garantizar un margen de error fijo ni deducir la nacionalidad por el rostro. El video se procesa localmente y no se envía a un servidor.</p>
+    <p class="notice">Solo se analiza un rostro dentro del contorno. La edad y la etiqueta hombre/mujer son estimaciones orientativas; no se puede garantizar un margen de error fijo ni deducir la nacionalidad por el rostro. El video se procesa localmente y no se envía a un servidor.</p>
     <canvas id="capture-canvas" hidden></canvas>
   </main>
 </body>

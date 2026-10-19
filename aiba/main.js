@@ -14,6 +14,13 @@ const captureCanvas = document.querySelector("#capture-canvas");
 
 const STABILIZATION_SAMPLES = 8;
 const MAX_MISSED_FRAMES = 10;
+const HEAD_SILHOUETTE = [
+  [50, 5], [44, 5], [37, 6], [31, 10], [27, 15], [24, 22], [22, 29], [21, 36],
+  [22, 41], [23, 44], [21, 43], [19, 43], [18, 45], [18, 51], [20, 58], [21, 60],
+  [25, 61], [27, 68], [31, 74], [38, 80], [38, 98], [62, 98], [62, 80], [69, 74],
+  [73, 68], [75, 61], [79, 60], [80, 58], [82, 51], [82, 45], [81, 43], [79, 43],
+  [77, 44], [78, 41], [79, 36], [78, 29], [76, 22], [73, 15], [69, 10], [63, 6], [56, 5],
+];
 let modelsPromise;
 let startRequestId = 0;
 let detectionFrameId;
@@ -34,14 +41,8 @@ function loadModels() {
 }
 
 function isFaceAligned(box) {
-  const centerX = (box.x + box.width / 2) / video.videoWidth;
-  const centerY = (box.y + box.height / 2) / video.videoHeight;
   const width = box.width / video.videoWidth;
   const height = box.height / video.videoHeight;
-  const guideCenterX = 0.5;
-  const guideCenterY = 0.5;
-  const guideRadiusX = 0.3;
-  const guideRadiusY = 0.4;
   const corners = [
     [box.x / video.videoWidth, box.y / video.videoHeight],
     [(box.x + box.width) / video.videoWidth, box.y / video.videoHeight],
@@ -53,15 +54,83 @@ function isFaceAligned(box) {
     && width <= 0.5
     && height >= 0.25
     && height <= 0.65
-    && centerX >= 0.34
-    && centerX <= 0.66
-    && centerY >= 0.25
-    && centerY <= 0.72
-    && corners.every(([x, y]) => (
-      ((x - guideCenterX) / guideRadiusX) ** 2
-      + ((y - guideCenterY) / guideRadiusY) ** 2
-      <= 1
-    ));
+    && corners.every((point) => isPointInsideHead(point));
+}
+
+function isPointInsideHead([x, y]) {
+  const pointX = x * 100;
+  const pointY = y * 100;
+  let inside = false;
+
+  for (let index = 0, previous = HEAD_SILHOUETTE.length - 1;
+    index < HEAD_SILHOUETTE.length;
+    previous = index, index += 1) {
+    const [x1, y1] = HEAD_SILHOUETTE[index];
+    const [x2, y2] = HEAD_SILHOUETTE[previous];
+    const crossesY = (y1 > pointY) !== (y2 > pointY);
+    const intersectionX = ((x2 - x1) * (pointY - y1)) / (y2 - y1) + x1;
+
+    if (crossesY && pointX < intersectionX) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+function traceHeadShape(context, width, height, closeAtNeck = false) {
+  const scaleX = width / 100;
+  const scaleY = height / 100;
+  const moveTo = (x, y) => context.moveTo(x * scaleX, y * scaleY);
+  const lineTo = (x, y) => context.lineTo(x * scaleX, y * scaleY);
+  const bezierCurveTo = (x1, y1, x2, y2, x3, y3) => {
+    context.bezierCurveTo(
+      x1 * scaleX,
+      y1 * scaleY,
+      x2 * scaleX,
+      y2 * scaleY,
+      x3 * scaleX,
+      y3 * scaleY,
+    );
+  };
+
+  context.beginPath();
+  moveTo(50, 5);
+  bezierCurveTo(34, 5, 25, 15, 23, 29);
+  bezierCurveTo(21, 36, 22, 41, 23, 44);
+  bezierCurveTo(19, 42, 17, 45, 18, 51);
+  lineTo(20, 58);
+  bezierCurveTo(21, 61, 22, 61, 25, 61);
+  bezierCurveTo(27, 69, 31, 75, 38, 80);
+  lineTo(38, 98);
+
+  if (closeAtNeck) {
+    lineTo(62, 98);
+  } else {
+    moveTo(62, 98);
+  }
+
+  lineTo(62, 80);
+  bezierCurveTo(69, 75, 73, 69, 75, 61);
+  bezierCurveTo(78, 61, 79, 61, 80, 58);
+  lineTo(82, 51);
+  bezierCurveTo(83, 45, 81, 42, 77, 44);
+  bezierCurveTo(78, 41, 79, 36, 77, 29);
+  bezierCurveTo(75, 15, 66, 5, 50, 5);
+
+  if (closeAtNeck) {
+    context.closePath();
+  }
+}
+
+function maskOutsideHead(context, width, height) {
+  context.save();
+  context.fillStyle = "#000";
+  context.beginPath();
+  context.rect(0, 0, width, height);
+  traceHeadShape(context, width, height, true);
+  context.fill("evenodd");
+  context.restore();
 }
 
 function trackDetections(detections) {
@@ -130,7 +199,7 @@ function trackDetections(detections) {
   return trackedDetections;
 }
 
-function drawDetections(detections, hasDetectedFace = detections.length > 0) {
+function drawDetections(detections, message = "") {
   const context = overlay.getContext("2d");
   if (!context) {
     throw new Error("El navegador no pudo crear el lienzo para dibujar los rostros.");
@@ -140,6 +209,7 @@ function drawDetections(detections, hasDetectedFace = detections.length > 0) {
 
   const trackedDetections = trackDetections(detections);
   stage.classList.toggle("is-aligned", trackedDetections.length > 0);
+  captureButton.disabled = trackedDetections.length !== 1;
   for (const face of trackedDetections) {
     const { x, y, width, height } = face.box;
     const fontSize = Math.max(14, Math.round(overlay.width / 50));
@@ -153,15 +223,6 @@ function drawDetections(detections, hasDetectedFace = detections.length > 0) {
     const labelHeight = fontSize * 2 + padding * 2;
     const labelY = Math.max(0, y - labelHeight);
 
-    context.lineWidth = Math.max(2, Math.round(overlay.width / 320));
-    context.strokeStyle = "#31e6b0";
-    context.beginPath();
-    context.moveTo(x + width * 0.5, y);
-    context.bezierCurveTo(x + width * 0.82, y, x + width, y + height * 0.22, x + width * 0.91, y + height * 0.56);
-    context.bezierCurveTo(x + width * 0.85, y + height * 0.82, x + width * 0.66, y + height, x + width * 0.5, y + height);
-    context.bezierCurveTo(x + width * 0.34, y + height, x + width * 0.15, y + height * 0.82, x + width * 0.09, y + height * 0.56);
-    context.bezierCurveTo(x, y + height * 0.22, x + width * 0.18, y, x + width * 0.5, y);
-    context.stroke();
     context.font = `600 ${fontSize}px system-ui, sans-serif`;
     const labelWidth = Math.max(
       context.measureText(label).width,
@@ -182,10 +243,10 @@ function drawDetections(detections, hasDetectedFace = detections.length > 0) {
     status.textContent = stillStabilizing
       ? `Estabilizando edad y etiqueta con hasta ${STABILIZATION_SAMPLES} detecciones.`
       : `${detections.length} rostro${detections.length === 1 ? "" : "s"} con estimaciones estabilizadas.`;
+  } else if (message) {
+    status.textContent = message;
   } else {
-    status.textContent = hasDetectedFace
-      ? "Rostro detectado. Centra la cara y ajusta la distancia dentro del contorno."
-      : "Coloca el rostro dentro del contorno para iniciar el escaneo.";
+    status.textContent = "Coloca una sola persona dentro del contorno para iniciar el escaneo.";
   }
 }
 
@@ -201,7 +262,7 @@ async function detectFaces() {
     );
     const alignedFaces = detections.filter(({ detection }) => isFaceAligned(detection.box));
 
-    if (alignedFaces.length) {
+    if (alignedFaces.length === 1) {
       const faceCrops = await faceapi.extractFaces(
         video,
         alignedFaces.map(({ detection }) => detection),
@@ -212,9 +273,18 @@ async function detectFaces() {
       drawDetections(alignedFaces.map((face, index) => ({
         ...face,
         ...estimates[index],
-      })), true);
+      })));
+    } else if (alignedFaces.length > 1) {
+      faceTracks = [];
+      drawDetections([], "Hay más de una cara dentro del contorno. Deja solo una persona.");
     } else {
-      drawDetections([], detections.length > 0);
+      faceTracks = [];
+      drawDetections(
+        [],
+        detections.length
+          ? "Rostro detectado fuera del contorno. Centra una sola persona en la guía."
+          : "Coloca una sola persona dentro del contorno para iniciar el escaneo.",
+      );
     }
 
     detectionFrameId = window.requestAnimationFrame(detectFaces);
@@ -280,7 +350,7 @@ async function startCamera() {
     placeholder.hidden = true;
     startButton.hidden = true;
     stopButton.hidden = false;
-    captureButton.disabled = false;
+    captureButton.disabled = true;
     status.textContent = "Cargando detección facial…";
 
     await loadModels();
@@ -309,8 +379,8 @@ async function startCamera() {
 }
 
 function capturePhoto() {
-  if (!video.videoWidth || video.paused) {
-    status.textContent = "Enciende la cámara antes de capturar una foto.";
+  if (!video.videoWidth || video.paused || captureButton.disabled) {
+    status.textContent = "Centra una sola persona dentro del contorno antes de capturar.";
     return;
   }
 
@@ -323,9 +393,16 @@ function capturePhoto() {
   }
 
   context.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+  maskOutsideHead(context, captureCanvas.width, captureCanvas.height);
   if (!overlay.hidden) {
     context.drawImage(overlay, 0, 0);
   }
+  traceHeadShape(context, captureCanvas.width, captureCanvas.height);
+  context.strokeStyle = "#fff";
+  context.lineWidth = Math.max(2, captureCanvas.width / 400);
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.stroke();
 
   captureCanvas.toBlob((blob) => {
     if (!blob) {
