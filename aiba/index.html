@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <title>Page Title</title>
+    <link rel='stylesheet' href='main.css'>
+    <script src='main.js'></script>
+    <!--  agregar y usar el main.py  -->
+      pyodide.loadPackage(['micropip']).then(() => {
+        return pyodide.runPythonAsync(`
+            import micropip
+            await micropip.install('main.py')
+        `);
+      }).then(() => {
+        console.log('main.py cargado y listo para usar');
+      }).catch((err) => {
+        console.error('Error al cargar main.py:', err);
+      });
+</head>
+<body>
+    <video id="video" autoplay playsinline width="640" height="480"></video>
+<button id="capturar">Capturar Foto</button>
+<canvas id="canvas" style="display:none;"></canvas>
+
+<script>
+  const video = document.getElementById('video');
+
+  // Solicitar permiso y encender la cámara
+  navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+    .then((stream) => {
+      video.srcObject = stream;
+    })
+    .catch((err) => {
+      console.error("Error al acceder a la cámara: ", err);
+    });
+</script>
+</body>
+</html>
