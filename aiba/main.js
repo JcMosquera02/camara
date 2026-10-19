@@ -11,9 +11,12 @@ const stopButton = document.querySelector("#stop-camera");
 const captureButton = document.querySelector("#capture-photo");
 const captureCanvas = document.querySelector("#capture-canvas");
 
+const STABILIZATION_SAMPLES = 8;
+const MAX_MISSED_FRAMES = 10;
 let modelsPromise;
 let startRequestId = 0;
 let detectionFrameId;
+let faceTracks = [];
 
 function loadModels() {
   if (!modelsPromise) {
@@ -29,6 +32,73 @@ function loadModels() {
   return modelsPromise;
 }
 
+function trackDetections(detections) {
+  const unmatchedTracks = new Set(faceTracks);
+  const trackedDetections = detections.map((result) => {
+    const box = result.detection.box;
+    const centerX = box.x + box.width / 2;
+    const centerY = box.y + box.height / 2;
+    let track;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    for (const candidate of unmatchedTracks) {
+      const candidateCenterX = candidate.box.x + candidate.box.width / 2;
+      const candidateCenterY = candidate.box.y + candidate.box.height / 2;
+      const distance = Math.hypot(centerX - candidateCenterX, centerY - candidateCenterY);
+      const maxDistance = Math.max(
+        80,
+        Math.max(box.width, box.height, candidate.box.width, candidate.box.height) * 1.5,
+      );
+
+      if (distance < maxDistance && distance < nearestDistance) {
+        track = candidate;
+        nearestDistance = distance;
+      }
+    }
+
+    if (track) {
+      unmatchedTracks.delete(track);
+    } else {
+      track = { box, samples: 0, maleProbability: 0, age: 0, missedFrames: 0 };
+      faceTracks.push(track);
+    }
+
+    const maleProbability = result.gender === "male"
+      ? result.genderProbability
+      : 1 - result.genderProbability;
+    if (track.samples < STABILIZATION_SAMPLES) {
+      const sampleCount = track.samples + 1;
+      track.maleProbability += (maleProbability - track.maleProbability) / sampleCount;
+      track.age += (result.age - track.age) / sampleCount;
+      track.samples = sampleCount;
+    } else {
+      const smoothing = 0.2;
+      track.maleProbability += (maleProbability - track.maleProbability) * smoothing;
+      track.age += (result.age - track.age) * smoothing;
+    }
+
+    track.box = box;
+    track.missedFrames = 0;
+    const gender = track.maleProbability >= 0.5 ? "Hombre" : "Mujer";
+    const confidence = Math.round(Math.max(track.maleProbability, 1 - track.maleProbability) * 100);
+
+    return {
+      box,
+      gender,
+      confidence,
+      age: Math.round(track.age),
+      sampleCount: track.samples,
+    };
+  });
+
+  for (const track of unmatchedTracks) {
+    track.missedFrames += 1;
+  }
+  faceTracks = faceTracks.filter((track) => track.missedFrames <= MAX_MISSED_FRAMES);
+
+  return trackedDetections;
+}
+
 function drawDetections(detections) {
   const context = overlay.getContext("2d");
   if (!context) {
@@ -37,30 +107,44 @@ function drawDetections(detections) {
 
   context.clearRect(0, 0, overlay.width, overlay.height);
 
-  for (const result of detections) {
-    const { x, y, width, height } = result.detection.box;
-    const label = result.gender === "male" ? "Hombre" : "Mujer";
-    const confidence = Math.round(result.genderProbability * 100);
-    const text = `Estimación: ${label} (${confidence}%)`;
+  const trackedDetections = trackDetections(detections);
+  for (const face of trackedDetections) {
+    const { x, y, width, height } = face.box;
     const fontSize = Math.max(14, Math.round(overlay.width / 50));
     const padding = 7;
-    const labelHeight = fontSize + padding * 2;
+    const label = `${face.gender} ${face.confidence}% · ~${face.age} años`;
+    const progress = face.sampleCount < STABILIZATION_SAMPLES
+      ? `Ajustando estimación ${face.sampleCount}/${STABILIZATION_SAMPLES}`
+      : "Estimación estabilizada";
+    const labelHeight = fontSize * 2 + padding * 2;
     const labelY = Math.max(0, y - labelHeight);
 
     context.lineWidth = Math.max(2, Math.round(overlay.width / 320));
     context.strokeStyle = "#31e6b0";
     context.strokeRect(x, y, width, height);
     context.font = `600 ${fontSize}px system-ui, sans-serif`;
-    const labelWidth = context.measureText(text).width + padding * 2;
+    const labelWidth = Math.max(
+      context.measureText(label).width,
+      context.measureText(progress).width,
+    ) + padding * 2;
     context.fillStyle = "#31e6b0";
     context.fillRect(x, labelY, labelWidth, labelHeight);
     context.fillStyle = "#101827";
-    context.fillText(text, x + padding, labelY + fontSize + padding / 2);
+    context.fillText(label, x + padding, labelY + fontSize + padding / 2);
+    context.font = `500 ${Math.max(11, fontSize - 2)}px system-ui, sans-serif`;
+    context.fillText(progress, x + padding, labelY + fontSize * 2 + padding / 2);
   }
 
-  status.textContent = detections.length
-    ? `${detections.length} rostro${detections.length === 1 ? "" : "s"} detectado${detections.length === 1 ? "" : "s"}.`
-    : "Buscando rostros…";
+  if (detections.length) {
+    const stillStabilizing = trackedDetections.some(
+      (face) => face.sampleCount < STABILIZATION_SAMPLES,
+    );
+    status.textContent = stillStabilizing
+      ? `Estabilizando edad y etiqueta con hasta ${STABILIZATION_SAMPLES} detecciones.`
+      : `${detections.length} rostro${detections.length === 1 ? "" : "s"} con estimaciones estabilizadas.`;
+  } else {
+    status.textContent = "Buscando rostros…";
+  }
 }
 
 async function detectFaces() {
@@ -98,6 +182,7 @@ function stopCamera() {
 
   video.pause();
   video.srcObject = null;
+  faceTracks = [];
   video.hidden = true;
   overlay.hidden = true;
   placeholder.hidden = false;
